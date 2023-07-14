@@ -1,0 +1,4 @@
+<Img><ImageHere></Img> Which region does the text " {} " describe in this image?
+<Img><ImageHere></Img> Find the region of " {} " in this image.
+<Img><ImageHere></Img> Where is " {} " in this picture?
+<Img><ImageHere></Img> Could you find " {} " in this image for me?

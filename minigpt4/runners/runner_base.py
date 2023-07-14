@@ -25,13 +25,15 @@ from minigpt4.common.dist_utils import (
 from minigpt4.common.registry import registry
 from minigpt4.common.utils import is_url
 from minigpt4.datasets.data_utils import concat_datasets, reorg_datasets_by_split, ChainDataset
+from minigpt4.datasets.datasets.refcoco_dataset import RefCoCoDataset
 from minigpt4.datasets.datasets.dataloader_utils import (
     IterLoader,
     MultiIterLoader,
     PrefetchLoader,
 )
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler
+from torch.utils.tensorboard import SummaryWriter
 
 
 @registry.register_runner("runner_base")
@@ -63,6 +65,9 @@ class RunnerBase:
 
         # self.setup_seeds()
         self.setup_output_dir()
+
+        self.tensorboard_writer = SummaryWriter(log_dir=self.tensorboard_dir)
+        self.task.set_tensorboard(self.tensorboard_writer)
 
     @property
     def device(self):
@@ -162,6 +167,7 @@ class RunnerBase:
             if iters_per_epoch is None:
                 try:
                     iters_per_epoch = len(self.dataloaders['train'])
+                    print(f'No iters_per_epoch in config, set iters_per_epoch to {iters_per_epoch} according to dataloader')
                 except (AttributeError, TypeError):
                     iters_per_epoch = 10000
 
@@ -350,15 +356,22 @@ class RunnerBase:
 
         output_dir = lib_root / self.config.run_cfg.output_dir / self.job_id
         result_dir = output_dir / "result"
+        # if self.use_distributed:
+        #     tensorboard_dir = output_dir / f'tensorboard_{get_rank()}'
+        # else:
+        tensorboard_dir = output_dir / 'tensorboard'
 
         output_dir.mkdir(parents=True, exist_ok=True)
         result_dir.mkdir(parents=True, exist_ok=True)
+        # tensorboard_dir.mkdir(parents=True, exist_ok=True)
 
         registry.register_path("result_dir", str(result_dir))
         registry.register_path("output_dir", str(output_dir))
+        registry.register_path("tensorboard_dir", str(output_dir))
 
         self.result_dir = result_dir
         self.output_dir = output_dir
+        self.tensorboard_dir = tensorboard_dir
 
     def train(self):
         start_time = time.time()
@@ -503,9 +516,7 @@ class RunnerBase:
 
         def _create_loader(dataset, num_workers, bsz, is_train, collate_fn):
             # create a single dataloader for each split
-            if isinstance(dataset, ChainDataset) or isinstance(
-                dataset, wds.DataPipeline
-            ):
+            if isinstance(dataset, ChainDataset) or isinstance(dataset, wds.DataPipeline):
                 # wds.WebdDataset instance are chained together
                 # webdataset.DataPipeline has its own sampler and collate_fn
                 loader = iter(
@@ -516,22 +527,28 @@ class RunnerBase:
                         pin_memory=True,
                     )
                 )
+            elif isinstance(dataset, RefCoCoDataset):
+                loader = DataLoader(dataset, batch_size=bsz, num_workers=num_workers, pin_memory=True)
+
             else:
                 # map-style dataset are concatenated together
                 # setup distributed sampler
                 if self.use_distributed:
-                    sampler = DistributedSampler(
-                        dataset,
-                        shuffle=is_train,
-                        num_replicas=get_world_size(),
-                        rank=get_rank(),
-                    )
+                    if isinstance(dataset, RefCoCoDataset):
+                        sampler = SequentialSampler
+                    else:
+                        sampler = DistributedSampler(
+                            dataset,
+                            shuffle=is_train,
+                            num_replicas=get_world_size(),
+                            rank=get_rank(),
+                        )
                     if not self.use_dist_eval_sampler:
                         # e.g. retrieval evaluation
-                        sampler = sampler if is_train else None
+                        sampler = sampler if is_train else None           
                 else:
                     sampler = None
-
+                
                 loader = DataLoader(
                     dataset,
                     batch_size=bsz,
@@ -634,7 +651,7 @@ class RunnerBase:
             raise RuntimeError("checkpoint url or path is invalid")
 
         state_dict = checkpoint["model"]
-        self.unwrap_dist_model(self.model).load_state_dict(state_dict,strict=False)
+        self.unwrap_dist_model(self.model).load_state_dict(state_dict, strict=False)
 
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         if self.scaler and "scaler" in checkpoint:

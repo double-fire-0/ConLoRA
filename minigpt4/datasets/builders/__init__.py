@@ -11,12 +11,14 @@ from minigpt4.datasets.builders.image_text_pair_builder import (
     LaionBuilder,
     CCSBUAlignBuilder
 )
+from minigpt4.datasets.builders.mmimage_text_builder import RefCoCoBuilder
 from minigpt4.common.registry import registry
 
 __all__ = [
     "CCSBUBuilder",
     "LaionBuilder",
-    "CCSBUAlignBuilder"
+    "CCSBUAlignBuilder",
+    'RefCoCoBuilder'
 ]
 
 
@@ -29,6 +31,9 @@ def load_dataset(name, cfg_path=None, vis_path=None, data_type=None):
     >>> print([len(dataset[split]) for split in splits])
 
     """
+    # check it is never used
+    assert NotImplementedError
+
     if cfg_path is None:
         cfg = None
     else:

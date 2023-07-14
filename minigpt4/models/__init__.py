@@ -13,7 +13,9 @@ from minigpt4.common.registry import registry
 from minigpt4.models.base_model import BaseModel
 from minigpt4.models.blip2 import Blip2Base
 from minigpt4.models.mini_gpt4 import MiniGPT4
+from minigpt4.models.degpt import DEGPT
 from minigpt4.processors.base_processor import BaseProcessor
+from minigpt4.models.mini_gpt4_lora import MiniGPT4LoRA
 
 
 __all__ = [
@@ -21,6 +23,8 @@ __all__ = [
     "BaseModel",
     "Blip2Base",
     "MiniGPT4",
+    'DEGPT',
+    'MiniGPT4LoRA',
 ]
 
 
@@ -44,7 +48,8 @@ def load_model(name, model_type, is_eval=False, device="cpu", checkpoint=None):
         model (torch.nn.Module): model.
     """
 
-    model = registry.get_model_class(name).from_pretrained(model_type=model_type)
+    model = registry.get_model_class(
+        name).from_pretrained(model_type=model_type)
 
     if checkpoint is not None:
         model.load_checkpoint(checkpoint)

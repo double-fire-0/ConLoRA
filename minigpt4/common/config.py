@@ -68,7 +68,8 @@ class Config:
 
         assert model_type is not None, "Missing model_type."
 
-        model_config_path = model_cls.default_config_path(model_type=model_type)
+        model_config_path = model_cls.default_config_path(
+            model_type=model_type)
 
         model_config = OmegaConf.create()
         # hierarchy override, customized config > default config
@@ -153,7 +154,8 @@ class Config:
                 dataset_config = self.config.datasets[dataset]
                 logging.info(self._convert_node_to_json(dataset_config))
             else:
-                logging.warning(f"No dataset named '{dataset}' in config. Skipping")
+                logging.warning(
+                    f"No dataset named '{dataset}' in config. Skipping")
 
         logging.info(f"\n======  Model Attributes  ======")
         logging.info(self._convert_node_to_json(self.config.model))
@@ -236,7 +238,8 @@ class ConfigValidator:
                 try:
                     self.arguments[k].val = self.arguments[k].type(v)
                 except ValueError:
-                    raise ValueError(f"{k} is not a valid {self.arguments[k].type}.")
+                    raise ValueError(
+                        f"{k} is not a valid {self.arguments[k].type}.")
 
             if self.arguments[k].choices is not None:
                 assert (
@@ -297,7 +300,8 @@ def create_runner_config_validator():
         "lr_sched",
         type=str,
         choices=lr_scheds_choices,
-        help="Learning rate scheduler to use, from {}".format(lr_scheds_choices),
+        help="Learning rate scheduler to use, from {}".format(
+            lr_scheds_choices),
     )
     task_choices = registry.list_tasks()
     validator.add_argument(

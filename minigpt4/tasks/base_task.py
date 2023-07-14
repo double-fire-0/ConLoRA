@@ -14,17 +14,30 @@ from minigpt4.common.dist_utils import get_rank, get_world_size, is_main_process
 from minigpt4.common.logger import MetricLogger, SmoothedValue
 from minigpt4.common.registry import registry
 from minigpt4.datasets.data_utils import prepare_sample
-
+import torchvision.transforms as T
+import base64
+from io import BytesIO
+import csv
+import copy
+from torchvision.utils import draw_bounding_boxes
+import re
+import numpy as np
+import cv2
 
 class BaseTask:
     def __init__(self, **kwargs):
         super().__init__()
 
         self.inst_id_key = "instance_id"
+        self.tmp_res_path = '/hetu_group/wangyan/tunnel/res_degpt/'
+        self.tensorboard_writer = None
 
     @classmethod
     def setup_task(cls, **kwargs):
         return cls()
+
+    def set_tensorboard(self, tensorboard_writer):
+        self.tensorboard_writer = tensorboard_writer
 
     def build_model(self, cfg):
         model_config = cfg.model_cfg
@@ -172,6 +185,7 @@ class BaseTask:
         When using epoch-based, training stops after one epoch; when using iter-based,
         training stops after #iters_per_epoch iterations.
         """
+        tb_freq = 500
         use_amp = scaler is not None
 
         if not hasattr(data_loader, "__next__"):
@@ -212,6 +226,7 @@ class BaseTask:
                     "iters": i,
                 }
             )
+            recoard_sample = copy.deepcopy(samples)
 
             lr_scheduler.step(cur_epoch=inner_epoch, cur_step=i)
 
@@ -235,6 +250,53 @@ class BaseTask:
 
             metric_logger.update(loss=loss.item())
             metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+            
+            if (i + 1) % log_freq == 0 and self.tensorboard_writer is not None:
+                total_iter = inner_epoch * iters_per_epoch + i
+                self.tensorboard_writer.add_scalar('train loss', loss, total_iter)
+                self.tensorboard_writer.add_scalar('train lr', optimizer.param_groups[0]["lr"], total_iter)
+
+        # TODO fix style
+            if (i + 1) % tb_freq == 0 and self.tensorboard_writer is not None:
+                # TODO a better style
+                image_norm = samples['image']
+                image_unnorm = self.unnorm_image(image_norm)
+                self.tensorboard_writer.add_images(f'train batch image in rank {get_rank()}', image_unnorm, total_iter)
+                try:
+                    vis_out = model.module.generate(samples)
+                    output_text = vis_out['output_text']
+                    # output_text = '<bin_74> <bin_23> <bin_34> <bin_58>###'
+                    description = vis_out['description']
+                    bin_boxes = vis_out['bin_boxes']
+                    image = vis_out['image_tensor']
+                    
+                    self.tensorboard_writer.add_text(f'text result train in rank {get_rank()}', output_text, total_iter)
+
+                    image = self.unnorm_image(image)
+                    image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), output_text, bin_boxes)
+                    image_bbox_des = self.put_text(image_bbox, description)
+                    self.tensorboard_writer.add_image(f'image result train in rank {get_rank()}', image_bbox_des, total_iter, dataformats='HWC')
+                    
+                    samples = next(data_loader)
+                    samples = prepare_sample(samples, cuda_enabled=cuda_enabled)
+
+                    vis_out = model.module.generate(samples)
+                    output_text = vis_out['output_text']
+                    # output_text = '<bin_74> <bin_23> <bin_34> <bin_58>###'
+                    description = vis_out['description']
+                    bin_boxes = vis_out['bin_boxes']
+                    image = vis_out['image_tensor']
+                    
+                    self.tensorboard_writer.add_text(f'text result eval in rank {get_rank()}', output_text, total_iter)
+                    image = self.unnorm_image(image)
+                    image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), output_text, bin_boxes)
+                    image_bbox_des = self.put_text(image_bbox, description)
+                    self.tensorboard_writer.add_image(f'image result eval in rank {get_rank()}', image_bbox_des, total_iter, dataformats='HWC')
+                    
+                    # self.tmp_save_result_wy(vis_out, os.path.join(self.tmp_res_path, 'eval.tsv'))
+                except Exception as error:
+                    # we don't want it to block training
+                    logging.exception("message")
 
         # after train_epoch()
         # gather the stats from all processes
@@ -244,6 +306,62 @@ class BaseTask:
             k: "{:.3f}".format(meter.global_avg)
             for k, meter in metric_logger.meters.items()
         }
+
+    def get_image_with_bbox(self, image, output_text, bin_boxes):
+        try:
+            output_box = re.findall(r"<bin_(.+?)>", output_text)
+            output_box = [int(out) for out in output_box]
+            bin_boxes = re.findall(r"<bin_(.+?)>", bin_boxes)
+            bin_boxes = [int(out) for out in bin_boxes]
+            box = [bin_boxes, output_box]
+            box = torch.tensor(box, dtype=torch.int)
+            image = draw_bounding_boxes(image, box, width=5, colors=["blue", "orange"], fill=False)
+            return image  # [Tensor(C,H,W)] uint8 
+        except Exception as error:
+            # we don't want it to block training
+            logging.exception("get_image_with_bbox")
+            raise error
+
+    def put_text(self, img, texts):
+        try:
+            arrimage = img.numpy().transpose(1, 2, 0)
+            result = cv2.putText(arrimage, str(texts), (0, 30), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 2)
+            return result
+        except Exception as error:
+            logging.exception("put_text")
+            raise error
+    
+    # TODO a better style
+    def unnorm_image(self, image_norm):
+        try:
+            has_batch = True
+            if len(image_norm.shape) == 3:
+                image_norm = image_norm.unsqueeze(0)
+                has_batch = False
+            device, dtype = image_norm.device, image_norm.dtype
+            mean = torch.tensor([0.48145466, 0.4578275, 0.40821073], device=device, dtype=dtype).view(1, -1, 1, 1)
+            std = torch.tensor([0.26862954, 0.26130258, 0.27577711], device=device, dtype=dtype).view(1, -1, 1, 1)
+            image_unnorm = image_norm * std + mean
+            # image_unnorm = image_unnorm.to(torch.uint8)
+            return image_unnorm if has_batch else image_unnorm[0]
+        except Exception as error:
+            logging.exception("unnorm_image")
+            raise error
+
+    # def tmp_save_result_wy(self, out_dict, res_path):
+    #     try:
+    #         output_text = out_dict['output_text']
+    #         description = out_dict['description']
+    #         bin_boxes = out_dict['bin_boxes']
+    #         image = T.ToPILImage()(out_dict['image_tensor'])
+    #         buffered = BytesIO()
+    #         image.save(buffered, format="JPEG")
+    #         img_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+    #         with open(res_path, 'a') as out_file:
+    #             tsv_writer = csv.writer(out_file, delimiter='\t')
+    #             tsv_writer.writerow([img_b64, description, output_text, bin_boxes])
+    #     except Exception as error:
+    #         print("An exception occurred:", error)
 
     @staticmethod
     def save_result(result, result_dir, filename, remove_duplicate=""):

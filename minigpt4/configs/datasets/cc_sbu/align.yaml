@@ -2,4 +2,4 @@ datasets:
   cc_sbu_align:
     data_type: images
     build_info:
-      storage: /path/to/cc_sbu_align/
+      storage: /hetu_group/shendong/data/project/llm/MINIGPT4_DATASET/cc_sbu_align

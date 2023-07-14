@@ -1,0 +1,6 @@
+datasets:
+  refcocop:
+    data_type: images
+    build_info:
+      tsv_path: /hetu_group/wangyan/datasets/refcocoplus_data/refcocoplus_train.tsv
+      tsv_cols: [0, 4, 2, 3]

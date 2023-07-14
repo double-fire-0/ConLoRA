@@ -1,5 +1,5 @@
 model:
-  arch: mini_gpt4
+  arch: mini_gpt4_lora
   model_type: pretrain_vicuna
   freeze_vit: True
   freeze_qformer: True
@@ -31,9 +31,9 @@ run:
   weight_decay: 0.05
   max_epoch: 5
   iters_per_epoch: 200
-  batch_size_train: 12
-  batch_size_eval: 12
-  num_workers: 4
+  batch_size_train: 1
+  batch_size_eval: 1
+  num_workers: 0
   warmup_steps: 200
 
   seed: 42

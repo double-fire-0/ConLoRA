@@ -27,5 +27,7 @@ registry.register_path("repo_root", repo_root)
 cache_root = os.path.join(repo_root, default_cfg.env.cache_root)
 registry.register_path("cache_root", cache_root)
 
+print(cache_root)
+
 registry.register("MAX_INT", sys.maxsize)
 registry.register("SPLIT_NAMES", ["train", "val", "test"])

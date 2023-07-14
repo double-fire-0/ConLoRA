@@ -1,21 +1,23 @@
 model:
-  arch: mini_gpt4
+  arch: degpt
   model_type: pretrain_vicuna
   freeze_vit: True
   freeze_qformer: True
   max_txt_len: 160
   end_sym: "###"
-  prompt_path: "prompts/alignment.txt"
+  prompt_path: "prompts/refcoco.txt"
   prompt_template: '###Human: {} ###Assistant: '
-  ckpt: '/hetu_group/wangyan/Wy_MiniGPT4/ckpt_pretrain/pretrained_minigpt4_7b_stage1.pth'
+  ckpt: '/hetu_group/wangyan/Wy_MiniGPT4/ckpt_pretrain/prerained_minigpt4_7b.pth'
 
 
 datasets:
-  cc_sbu_align:
+  refcoco:
     vis_processor:
       train:
-        name: "blip2_image_train"
-        image_size: 224
+        name: "coco_image_train"
+        patch_image_size: 224
+        max_image_size: 224
+        num_bin: 500
     text_processor:
       train:
         name: "blip_caption"
@@ -30,14 +32,16 @@ run:
 
   weight_decay: 0.05
   max_epoch: 5
-  iters_per_epoch: 200
-  batch_size_train: 12
-  batch_size_eval: 12
-  num_workers: 4
+  # iters_per_epoch: 200
+  # batch_size_train: 12
+  # batch_size_eval: 12
+  batch_size_train: 8 # can run on 32g v100
+  batch_size_eval: 8
+  num_workers:  0 # for debug set 0 #4
   warmup_steps: 200
 
   seed: 42
-  output_dir: "output/minigpt4_stage2_finetune"
+  output_dir: "output/degpt_debug"
 
   amp: True
   resume_ckpt_path: null

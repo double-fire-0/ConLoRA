@@ -23,10 +23,17 @@ class MultiIterLoader:
 
     def __init__(self, loaders, ratios=None):
         # assert all loaders has __next__ method
+        # for loader in loaders:
+        #     assert hasattr(
+        #         loader, "__next__"
+        #     ), "Loader {} has no __next__ method.".format(loader)
+        self.loader_iters = []
         for loader in loaders:
-            assert hasattr(
-                loader, "__next__"
-            ), "Loader {} has no __next__ method.".format(loader)
+            if not hasattr(loader, "__next__"):
+                self.loader_iters += [iter(loader)]
+                print('Create itar loader auto')
+            else:
+                self.loader_iters += [loader]
 
         if ratios is None:
             ratios = [1.0] * len(loaders)
@@ -40,7 +47,15 @@ class MultiIterLoader:
     def __next__(self):
         # random sample from each loader by ratio
         loader_idx = random.choices(range(len(self.loaders)), self.ratios, k=1)[0]
-        return next(self.loaders[loader_idx])
+        try:
+            res = next(self.loader_iters[loader_idx])
+        except StopIteration:
+            self.loader_iters[loader_idx] = iter(self.loaders[loader_idx])
+            res = next(self.loader_iters[loader_idx])
+        return res
+
+    def __len__(self):
+        return sum([len(loader) for loader in self.loaders])
 
 
 class PrefetchLoader(object):

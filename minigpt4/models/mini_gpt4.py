@@ -163,7 +163,7 @@ class MiniGPT4(Blip2Base):
         else:
             return img_embeds, atts_img
 
-    def forward(self, samples):
+    def forward(self, samples):       
         image = samples["image"]
         img_embeds, atts_img = self.encode_img(image)
         if hasattr(samples, 'question_split'):  # VQA dataset
@@ -192,15 +192,14 @@ class MiniGPT4(Blip2Base):
         )
 
         empty_targets = (
-            torch.ones([atts_img.shape[0], atts_img.shape[1]+1],
-                       dtype=torch.long).to(image.device).fill_(-100)  # plus one for bos
+            torch.ones([atts_img.shape[0], atts_img.shape[1] + 1], dtype=torch.long).to(image.device).fill_(-100)  # plus one for bos
         )
         targets = torch.cat([empty_targets, targets], dim=1)
 
         batch_size = img_embeds.shape[0]
         bos = torch.ones([batch_size, 1],
-                         dtype=to_regress_tokens.input_ids.dtype,
-                         device=to_regress_tokens.input_ids.device) * self.llama_tokenizer.bos_token_id
+                        dtype=to_regress_tokens.input_ids.dtype,
+                        device=to_regress_tokens.input_ids.device) * self.llama_tokenizer.bos_token_id
         bos_embeds = self.llama_model.model.embed_tokens(bos)
         atts_bos = atts_img[:, :1]
 
