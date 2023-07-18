@@ -70,16 +70,21 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         if attn_head_dim is not None:
             head_dim = attn_head_dim
-        all_head_dim = head_dim * self.num_heads
+        self.all_head_dim = head_dim * self.num_heads
         self.scale = qk_scale or head_dim ** -0.5
 
-        self.qkv = nn.Linear(dim, all_head_dim * 3, bias=False)
+        self.qkv = nn.Linear(dim, self.all_head_dim * 3, bias=False)
         if qkv_bias:
-            self.q_bias = nn.Parameter(torch.zeros(all_head_dim))
-            self.v_bias = nn.Parameter(torch.zeros(all_head_dim))
+            self.q_bias = nn.Parameter(torch.zeros(self.all_head_dim))
+            self.v_bias = nn.Parameter(torch.zeros(self.all_head_dim))
         else:
             self.q_bias = None
             self.v_bias = None
+
+        self.query = nn.Linear(dim, self.all_head_dim, bias=False)
+        self.key = nn.Linear(dim, self.all_head_dim, bias=False)
+        self.value = nn.Linear(dim, self.all_head_dim, bias=False)
+        
 
         if window_size:
             self.window_size = window_size
@@ -112,16 +117,23 @@ class Attention(nn.Module):
             self.relative_position_index = None
 
         self.attn_drop = nn.Dropout(attn_drop)
-        self.proj = nn.Linear(all_head_dim, dim)
+        self.proj = nn.Linear(self.all_head_dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
     def forward(self, x, rel_pos_bias=None):
         B, N, C = x.shape
-        qkv_bias = None
-        if self.q_bias is not None:
-            qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
+        # qkv_bias = None
+        # if self.q_bias is not None:
+        #     qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
         # qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-        qkv = F.linear(input=x, weight=self.qkv.weight, bias=qkv_bias)
+        # qkv = F.linear(input=x, weight=self.qkv.weight, bias=qkv_bias)
+        
+        # q, k, v sparse forward
+        q = self.query(x)
+        k = self.key(x)
+        v = self.value(x)
+        qkv = torch.cat([q, k, v], dim=2)
+
         qkv = qkv.reshape(B, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
 
@@ -146,6 +158,27 @@ class Attention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+        
+    def split_qkv(self):
+        # Must run after load ckpt
+        # assign self.qkv.weight to three slef.query / self.key / self.value
+        # self.qkv.weight.shape = (dim, 3 * all_head_dim)
+        self.query.weight = nn.Parameter(self.qkv.weight[0: self.all_head_dim, :])
+        self.key.weight = nn.Parameter(self.qkv.weight[self.all_head_dim: 2 * self.all_head_dim, :])
+        self.value.weight = nn.Parameter(self.qkv.weight[2 * self.all_head_dim: 3 * self.all_head_dim, :])
+
+        qkv_bias = None
+        if self.q_bias is not None:
+            qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
+        if qkv_bias is not None:
+            self.query.bias = nn.Parameter(qkv_bias[0: self.all_head_dim])
+            self.key.bias = nn.Parameter(qkv_bias[self.all_head_dim: 2 * self.all_head_dim])
+            self.value.bias = nn.Parameter(qkv_bias[2 * self.all_head_dim: 3 * self.all_head_dim])
+
+        # del for parameter count    
+        del self.qkv, self.q_bias, self.v_bias
+        
+
 
 
 class Block(nn.Module):
@@ -412,7 +445,7 @@ def convert_weights_to_fp16(model: nn.Module):
     model.apply(_convert_weights_to_fp16)
     
     
-def create_eva_vit_g(img_size=224,drop_path_rate=0.4,use_checkpoint=False,precision="fp16"):
+def create_eva_vit_g_sparse_qkv(img_size=224,drop_path_rate=0.4,use_checkpoint=False,precision="fp16"):
     model = VisionTransformer(
         img_size=img_size,
         patch_size=14,
@@ -434,10 +467,14 @@ def create_eva_vit_g(img_size=224,drop_path_rate=0.4,use_checkpoint=False,precis
     interpolate_pos_embed(model,state_dict)
     
     incompatible_keys = model.load_state_dict(state_dict, strict=False)
-    print(f'incompatible_keys: \n {incompatible_keys}')
+    # print(f'incompatible_keys: \n {incompatible_keys}')
+
+    for name, layer in model.named_modules():
+        if isinstance(layer, Attention):
+            layer.split_qkv()
+            print(f'split qkv for {name}')
     
     if precision == "fp16":
 #         model.to("cuda") 
         convert_weights_to_fp16(model)
     return model
-    
