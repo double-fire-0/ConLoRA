@@ -22,6 +22,7 @@ from minigpt4.common.logger import MetricLogger
 from minigpt4.models.base_model import BaseModel
 from minigpt4.models.Qformer import BertConfig, BertLMHeadModel
 from minigpt4.models.eva_vit import create_eva_vit_g
+from minigpt4.models.eva_vit_sparse_qkv import create_eva_vit_g_sparse_qkv
 from transformers import BertTokenizer
 
 
@@ -61,10 +62,16 @@ class Blip2Base(BaseModel):
     def init_vision_encoder(
         cls, model_name, img_size, drop_path_rate, use_grad_checkpoint, precision
     ):
-        assert model_name == "eva_clip_g", "vit model must be eva_clip_g for current version of MiniGPT-4"
-        visual_encoder = create_eva_vit_g(
-            img_size, drop_path_rate, use_grad_checkpoint, precision
-        )
+        assert model_name in ["eva_clip_g", 'eva_clip_g_sparse_qkv'], "vit model must be eva_clip_g for current version of MiniGPT-4"
+
+        if model_name == "eva_clip_g":
+            visual_encoder = create_eva_vit_g(
+                img_size, drop_path_rate, use_grad_checkpoint, precision
+            )
+        else:
+            visual_encoder = create_eva_vit_g_sparse_qkv(
+                img_size, drop_path_rate, use_grad_checkpoint, precision
+            )
 
         ln_vision = LayerNorm(visual_encoder.num_features)
         return visual_encoder, ln_vision

@@ -1,5 +1,7 @@
 import logging
 import random
+import copy
+import os
 
 import torch
 from torch.cuda.amp import autocast as autocast
@@ -9,13 +11,13 @@ from minigpt4.common.registry import registry
 from minigpt4.models.blip2 import Blip2Base, disabled_train
 from minigpt4.models.modeling_llama import LlamaForCausalLM
 from transformers import LlamaTokenizer
-import copy
 from transformers import StoppingCriteria, StoppingCriteriaList
 from minigpt4.conversation.conversation import StoppingCriteriaSub
+from minigpt4.models.utils.lora_util import default_lora_config_map, get_lora_model, print_trainable_parameters
 
 
-@registry.register_model("degpt")
-class DEGPT(Blip2Base):
+@registry.register_model("conlora_det")
+class ConLora_Det(Blip2Base):
     """
     BLIP2 GPT-LLAMA model.
     """
@@ -34,6 +36,7 @@ class DEGPT(Blip2Base):
         vit_precision="fp16",
         freeze_vit=True,
         freeze_qformer=True,
+        freeze_fc=True,
         num_query_token=32,
         llama_model="",
         prompt_path="",
@@ -43,9 +46,13 @@ class DEGPT(Blip2Base):
         low_resource=False,  # use 8 bit and put vit in cpu
         # the device of 8bit model should be set when loading and cannot be changed anymore.
         device_8bit=0,
+        content_use_lora=['ve', 'qformer'],
+        lora_config_map=default_lora_config_map,
     ):
         super().__init__()
 
+        self.content_use_lora = content_use_lora
+        self.lora_config_map = lora_config_map
         self.tokenizer = self.init_tokenizer()
         self.low_resource = low_resource
 
@@ -118,6 +125,17 @@ class DEGPT(Blip2Base):
         self.max_txt_len = max_txt_len
         self.end_sym = end_sym
 
+        # freeze fc before set lora
+        if freeze_fc:
+            for name, param in self.llama_proj.named_parameters():
+                param.requires_grad = False
+            self.llama_proj = self.llama_proj.eval()
+            self.llama_proj.train = disabled_train
+            logging.info("freeze Qformer")
+
+        # Set up Lora model
+        self._init_lora()
+
         if prompt_path:
             with open(prompt_path, 'r') as f:
                 raw_prompts = f.read().splitlines()
@@ -130,6 +148,29 @@ class DEGPT(Blip2Base):
                 random.choice(self.prompt_list)))
         else:
             self.prompt_list = []
+    
+    def _init_lora(self):
+        for content in self.content_use_lora:
+            # from ipdb import set_trace; set_trace()
+            if content == 've':
+                self.visual_encoder = get_lora_model(
+                    self.visual_encoder, self.lora_config_map[content])
+                print('Set up Lora for visual encoder')
+                print_trainable_parameters(self.visual_encoder)
+            elif content == 'qformer':
+                self.Qformer = get_lora_model(
+                    self.Qformer, self.lora_config_map[content])
+                print('Set up Lora for Qformer')
+                print_trainable_parameters(self.Qformer)
+            elif content == 'llm':
+                self.llama_model = get_lora_model(
+                    self.llama_model, self.lora_config_map[content])
+                print('Set up Lora for LLAMA')
+                print_trainable_parameters(self.llama_model)
+            else:
+                raise NotImplementedError(
+                    f'content {content} not supported in conlora')
+
 
     def vit_to_cpu(self):
         self.ln_vision.to("cpu")
@@ -316,6 +357,18 @@ class DEGPT(Blip2Base):
         
         return {'description': description[0], "output_text": output_text, 'bin_boxes': bin_boxes[0], 'image_tensor': image[0]}
 
+    def save_lora(self, path):
+        for content in self.content_use_lora:
+            save_path = os.path.join(path, content)
+            if content == 've':
+                self.visual_encoder.save_pretrained(save_path)
+            elif content == 'qformer':
+                self.Qformer.save_pretrained(save_path)
+            elif content == 'llm':
+                self.llama_model.save_pretrained(save_path)
+            else:
+                raise NotImplementedError
+
     @classmethod
     def from_config(cls, cfg):
         vit_model = cfg.get("vit_model", "eva_clip_g")
@@ -330,6 +383,7 @@ class DEGPT(Blip2Base):
         vit_precision = cfg.get("vit_precision", "fp16")
         freeze_vit = cfg.get("freeze_vit", True)
         freeze_qformer = cfg.get("freeze_qformer", True)
+        freeze_fc = cfg.get("freeze_fc", True)
         low_resource = cfg.get("low_resource", False)
         device_8bit = cfg.get("device_8bit", 0)
 
@@ -337,6 +391,18 @@ class DEGPT(Blip2Base):
         prompt_template = cfg.get("prompt_template", "")
         max_txt_len = cfg.get("max_txt_len", 32)
         end_sym = cfg.get("end_sym", '\n')
+
+        # from ipdb import set_trace; set_trace()
+        content_use_lora = cfg.get("content_use_lora", ['ve', 'qformer'])  # not use lora llm by default
+
+        # TODO: copy bug of loraconfig fix next version
+        # lora_config_map = copy.deepcopy(default_lora_config_map)
+        lora_config_map = default_lora_config_map
+        for content in content_use_lora:
+            content_cfg = cfg.get(content + '_lora_cfg', None)
+            if content_cfg is not None:
+                for key, item in content_cfg.items():
+                    setattr(lora_config_map[content], key, item)
 
         model = cls(
             vit_model=vit_model,
@@ -347,6 +413,7 @@ class DEGPT(Blip2Base):
             vit_precision=vit_precision,
             freeze_vit=freeze_vit,
             freeze_qformer=freeze_qformer,
+            freeze_fc=freeze_fc,
             num_query_token=num_query_token,
             llama_model=llama_model,
             prompt_path=prompt_path,
@@ -355,6 +422,8 @@ class DEGPT(Blip2Base):
             end_sym=end_sym,
             low_resource=low_resource,
             device_8bit=device_8bit,
+            content_use_lora=content_use_lora,
+            lora_config_map=lora_config_map
         )
 
         ckpt_path = cfg.get("ckpt", "")  # load weights of MiniGPT-4

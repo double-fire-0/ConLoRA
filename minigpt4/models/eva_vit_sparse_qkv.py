@@ -128,6 +128,11 @@ class Attention(nn.Module):
         # qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         # qkv = F.linear(input=x, weight=self.qkv.weight, bias=qkv_bias)
         
+        # follow blip set k bias to zero
+        # if self.key.bias is not None:
+        #     self.key.bias = nn.Parameter(torch.zeros(self.value.bias, requires_grad=False))
+            # qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
+        
         # q, k, v sparse forward
         q = self.query(x)
         k = self.key(x)
@@ -168,6 +173,8 @@ class Attention(nn.Module):
         self.value.weight = nn.Parameter(self.qkv.weight[2 * self.all_head_dim: 3 * self.all_head_dim, :])
 
         qkv_bias = None
+
+        # not need for causal vit model
         if self.q_bias is not None:
             qkv_bias = torch.cat((self.q_bias, torch.zeros_like(self.v_bias, requires_grad=False), self.v_bias))
         if qkv_bias is not None:
@@ -472,7 +479,7 @@ def create_eva_vit_g_sparse_qkv(img_size=224,drop_path_rate=0.4,use_checkpoint=F
     for name, layer in model.named_modules():
         if isinstance(layer, Attention):
             layer.split_qkv()
-            print(f'split qkv for {name}')
+            # print(f'split qkv for {name}')
     
     if precision == "fp16":
 #         model.to("cuda") 

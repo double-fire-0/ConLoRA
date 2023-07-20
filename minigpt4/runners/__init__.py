@@ -6,5 +6,6 @@
 """
 
 from minigpt4.runners.runner_base import RunnerBase
+from minigpt4.runners.runner_lora import RunnerRola
 
-__all__ = ["RunnerBase"]
+__all__ = ["RunnerBase", 'RunnerRola']

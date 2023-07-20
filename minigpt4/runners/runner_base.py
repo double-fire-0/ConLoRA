@@ -104,18 +104,22 @@ class RunnerBase:
     def optimizer(self):
         # TODO make optimizer class and configurations
         if self._optimizer is None:
-            num_parameters = 0
+            trainable_params = 0
+            all_params = 0
             p_wd, p_non_wd = [], []
             for n, p in self.model.named_parameters():
+                all_params += p.data.nelement()
                 if not p.requires_grad:
                     continue  # frozen weights
-                print(n)
+                print(f'Train parameter: {n}')
                 if p.ndim < 2 or "bias" in n or "ln" in n or "bn" in n:
                     p_non_wd.append(p)
                 else:
                     p_wd.append(p)
-                num_parameters += p.data.nelement()
-            logging.info("number of trainable parameters: %d" % num_parameters)
+                trainable_params += p.data.nelement()
+            logging.info(
+                f"Model Sum: trainable params: {trainable_params} || all params: {all_params} || trainable%: {100 * trainable_params / all_params:.2f}"
+            )
             optim_params = [
                 {
                     "params": p_wd,
