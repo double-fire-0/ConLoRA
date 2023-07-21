@@ -6,6 +6,7 @@ import os
 import torch
 from torch.cuda.amp import autocast as autocast
 import torch.nn as nn
+from peft import PeftModel
 
 from minigpt4.common.registry import registry
 from minigpt4.models.blip2 import Blip2Base, disabled_train
@@ -148,7 +149,7 @@ class ConLora_Det(Blip2Base):
                 random.choice(self.prompt_list)))
         else:
             self.prompt_list = []
-    
+
     def _init_lora(self):
         for content in self.content_use_lora:
             # from ipdb import set_trace; set_trace()
@@ -232,9 +233,9 @@ class ConLora_Det(Blip2Base):
                 labels_after_image.input_ids == self.llama_tokenizer.pad_token_id, -100
             )
 
-            p_before_embeds = self.llama_model.model.embed_tokens(p_before_tokens.input_ids)  # .expand(batch_size, -1, -1)
+            p_before_embeds = self.get_embed_tokens(p_before_tokens.input_ids)  # .expand(batch_size, -1, -1)
             # .expand(batch_size, -1, -1) expand shouldn't make influence
-            e_after_embeds = self.llama_model.model.embed_tokens(e_after_tokens.input_ids)
+            e_after_embeds = self.get_embed_tokens(e_after_tokens.input_ids)
             wrapped_all_embeds = torch.cat([p_before_embeds, img_embeds, e_after_embeds], dim=1)
             wrapped_atts_all = torch.cat([atts_img[:, :1].expand(
                 -1, p_before_embeds.shape[1] + img_embeds.shape[1]), e_after_tokens.attention_mask], dim=1)
@@ -262,8 +263,8 @@ class ConLora_Det(Blip2Base):
             p_before_tokens = self.llama_tokenizer(p_before, return_tensors="pt", add_special_tokens=False).to(img_embeds.device)
             p_after_tokens = self.llama_tokenizer(p_after, return_tensors="pt", add_special_tokens=False).to(img_embeds.device)
 
-            p_before_embeds = self.llama_model.model.embed_tokens(p_before_tokens.input_ids)
-            p_after_embeds = self.llama_model.model.embed_tokens(p_after_tokens.input_ids)
+            p_before_embeds = self.get_embed_tokens(p_before_tokens.input_ids)
+            p_after_embeds = self.get_embed_tokens(p_after_tokens.input_ids)
 
             wrapped_gengrate_embeds = torch.cat([p_before_embeds, one_image_embed, p_after_embeds], dim=1)
 
@@ -291,7 +292,7 @@ class ConLora_Det(Blip2Base):
         batch_size = img_embeds.shape[0]
 
         bos = torch.ones([batch_size, 1], dtype=labels.dtype, device=labels.device) * self.llama_tokenizer.bos_token_id
-        bos_embeds = self.llama_model.model.embed_tokens(bos)
+        bos_embeds = self.get_embed_tokens(bos)
         atts_bos = wrapped_atts_all[:, :1]
 
         inputs_embeds = torch.cat([bos_embeds, wrapped_embeds_all], dim=1)
@@ -328,7 +329,7 @@ class ConLora_Det(Blip2Base):
         batch_size = img_embeds.shape[0]
 
         bos = torch.ones([1, 1], dtype=torch.long, device=inputs_embeds.device) * self.llama_tokenizer.bos_token_id
-        bos_embeds = self.llama_model.model.embed_tokens(bos)
+        bos_embeds = self.get_embed_tokens(bos)
         inputs_embeds = torch.cat([bos_embeds, inputs_embeds], dim=1)
 
         stop_words_ids = [torch.tensor([835]).to(self.device),
@@ -356,6 +357,12 @@ class ConLora_Det(Blip2Base):
         output_text = self.llama_tokenizer.decode(output_token, add_special_tokens=False)
         
         return {'description': description[0], "output_text": output_text, 'bin_boxes': bin_boxes[0], 'image_tensor': image[0]}
+    
+    def get_embed_tokens(self, samples):
+        if isinstance(self.llama_model, PeftModel):
+            return self.llama_model.model.model.embed_tokens(samples)
+        else:
+            return self.get_embed_tokens(samples)
 
     def save_lora(self, path):
         for content in self.content_use_lora:

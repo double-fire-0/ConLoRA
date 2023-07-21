@@ -259,9 +259,10 @@ class BaseTask:
         # TODO fix style
             if (i + 1) % tb_freq == 0 and self.tensorboard_writer is not None:
                 # TODO a better style
-                image_norm = samples['image']
-                image_unnorm = self.unnorm_image(image_norm)
-                self.tensorboard_writer.add_images(f'train batch image in rank {get_rank()}', image_unnorm, total_iter)
+                # write train images to tensorboard
+                # image_norm = samples['image']
+                # image_unnorm = self.unnorm_image(image_norm)
+                # self.tensorboard_writer.add_images(f'train batch image in rank {get_rank()}', image_unnorm, total_iter)
                 try:
                     vis_out = model.module.generate(samples)
                     output_text = vis_out['output_text']
