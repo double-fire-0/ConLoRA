@@ -272,6 +272,7 @@ class BaseTask:
                     image = vis_out['image_tensor']
                     
                     self.tensorboard_writer.add_text(f'text result train in rank {get_rank()}', output_text, total_iter)
+                    self.tensorboard_writer.flush()
 
                     image = self.unnorm_image(image)
                     image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), output_text, bin_boxes)
@@ -320,7 +321,7 @@ class BaseTask:
             return image  # [Tensor(C,H,W)] uint8 
         except Exception as error:
             # we don't want it to block training
-            logging.exception("get_image_with_bbox")
+            logging.exception(f"get_image_with_bbox rank: {get_rank()}")
             raise error
 
     def put_text(self, img, texts):

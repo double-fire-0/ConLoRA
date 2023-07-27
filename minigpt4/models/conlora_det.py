@@ -402,7 +402,7 @@ class ConLora_Det(Blip2Base):
         # from ipdb import set_trace; set_trace()
         content_use_lora = cfg.get("content_use_lora", ['ve', 'qformer'])  # not use lora llm by default
 
-        # TODO: copy bug of loraconfig fix next version
+        # TODO: copy bug of loraconfig fix next peft version
         # lora_config_map = copy.deepcopy(default_lora_config_map)
         lora_config_map = default_lora_config_map
         for content in content_use_lora:
@@ -410,6 +410,7 @@ class ConLora_Det(Blip2Base):
             if content_cfg is not None:
                 for key, item in content_cfg.items():
                     setattr(lora_config_map[content], key, item)
+                print(f'Reset lora config of {content} to \n{lora_config_map[content]}')
 
         model = cls(
             vit_model=vit_model,
