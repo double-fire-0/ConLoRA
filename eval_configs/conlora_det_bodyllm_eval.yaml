@@ -1,0 +1,33 @@
+model:
+  arch: conlora_det
+  model_type: pretrain_vicuna
+  content_use_lora: ['ve', 'qformer','llm']
+  llm_lora_cfg:
+    target_modules: .*model\.layers\.\b([0-9]|1[0-9]|2[0-1])\b.*\.(q_proj|v_proj)
+  vit_model: eva_clip_g_sparse_qkv
+  vit_precision: fp16 # TODO: check wehter use fp16 or not
+  freeze_vit: True
+  freeze_qformer: True
+  freeze_fc: True
+  max_txt_len: 160
+  end_sym: "###"
+  prompt_path: "prompts/refcoco.txt"
+  prompt_template: '###Human: {} ###Assistant: '
+  ckpt: '/hetu_group/wangyan/Wy_MiniGPT4/ckpt_pretrain/prerained_minigpt4_7b.pth'
+  lora_path:
+    detection_lora: /hetu_group/wangyan/Wy_MiniGPT4/minigpt4/output/conlora_det_bodyllm/final_bodyllm/lora_9
+
+
+datasets:
+  cc_sbu_align:
+    vis_processor:
+      train:
+        name: "blip2_image_eval"
+        image_size: 224
+    text_processor:
+      train:
+        name: "blip_caption"
+
+run:
+  runner: runner_lora
+  task: image_text_pretrain

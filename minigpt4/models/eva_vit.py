@@ -395,7 +395,10 @@ def interpolate_pos_embed(model, checkpoint_model):
             
             
 def convert_weights_to_fp16(model: nn.Module):
-    """Convert applicable model parameters to fp16"""
+    """ Convert applicable model parameters to fp16
+        Not convert LayerNorm and BatchNorm layers during training
+    """
+
 
     def _convert_weights_to_fp16(l):
         if isinstance(l, (nn.Conv1d, nn.Conv2d, nn.Linear)):
@@ -439,5 +442,6 @@ def create_eva_vit_g(img_size=224,drop_path_rate=0.4,use_checkpoint=False,precis
     if precision == "fp16":
 #         model.to("cuda") 
         convert_weights_to_fp16(model)
+        # model.half()
     return model
     

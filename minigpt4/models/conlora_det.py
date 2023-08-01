@@ -266,10 +266,10 @@ class ConLora_Det(Blip2Base):
             p_before_embeds = self.get_embed_tokens(p_before_tokens.input_ids)
             p_after_embeds = self.get_embed_tokens(p_after_tokens.input_ids)
 
-            wrapped_gengrate_embeds = torch.cat([p_before_embeds, one_image_embed, p_after_embeds], dim=1)
+            wrapped_generate_embeds = torch.cat([p_before_embeds, one_image_embed, p_after_embeds], dim=1)
 
             # return all part expect bos
-            return wrapped_gengrate_embeds
+            return wrapped_generate_embeds
         else:
             assert NotImplementedError
 
@@ -362,7 +362,7 @@ class ConLora_Det(Blip2Base):
         if isinstance(self.llama_model, PeftModel):
             return self.llama_model.model.model.embed_tokens(samples)
         else:
-            return self.get_embed_tokens(samples)
+            return self.llama_model.model.embed_tokens(samples)
 
     def save_lora(self, path):
         for content in self.content_use_lora:
@@ -375,6 +375,44 @@ class ConLora_Det(Blip2Base):
                 self.llama_model.save_pretrained(save_path)
             else:
                 raise NotImplementedError
+
+    def load_lora(self, name, path):
+        for content in self.content_use_lora:
+            load_path = os.path.join(path, content)
+            if content == 've':
+                self.visual_encoder.load_adapter(load_path, adapter_name=name)
+            elif content == 'qformer':
+                self.Qformer.load_adapter(load_path, adapter_name=name)
+            elif content == 'llm':
+                self.llama_model.load_adapter(load_path, adapter_name=name)
+            else:
+                raise NotImplementedError
+
+    # TODO add lora now class attribute
+    # TODO: Check load adpater and reload model
+
+    def check_set_lora(self, lora_name):
+        if lora_name == 'original':
+            for content in self.content_use_lora:
+                if content == 've':
+                    self.visual_encoder.disable_adapter()
+                elif content == 'qformer':
+                    self.Qformer.disable_adapter()
+                elif content == 'llm':
+                    self.llama_model.disable_adapter()
+                else:
+                    raise NotImplementedError
+        else:
+            for content in self.content_use_lora:
+                if content == 've':
+                    self.visual_encoder.set_adapter(lora_name)
+                elif content == 'qformer':
+                    self.Qformer.set_adapter(lora_name)
+                elif content == 'llm':
+                    self.llama_model.set_adapter(lora_name)
+                else:
+                    raise NotImplementedError
+        print('Set LORA to {}'.format(lora_name))
 
     @classmethod
     def from_config(cls, cfg):
@@ -439,6 +477,10 @@ class ConLora_Det(Blip2Base):
             print("Load BLIP2-LLM Checkpoint: {}".format(ckpt_path))
             ckpt = torch.load(ckpt_path, map_location="cpu")
             msg = model.load_state_dict(ckpt['model'], strict=False)
+        
+        lora_path = cfg.get('lora_path',{})
+        for name, path in lora_path.items():
+            model.load_lora(name, path)
 
         return model
 

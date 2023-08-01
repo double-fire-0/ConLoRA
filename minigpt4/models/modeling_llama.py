@@ -573,6 +573,14 @@ class LlamaModel(LlamaPreTrainedModel):
 
             hidden_states = layer_outputs[0]
 
+
+            # TODO: why this can slove the problem?
+            if not self.training:
+                if hidden_states.isinf().sum() > 0.:
+                    inf_idx = torch.where(hidden_states.isinf())
+                    print("Warning: 'hidden_states' have 'inf' values at", inf_idx)
+                    hidden_states[inf_idx[0], inf_idx[1], inf_idx[2]] = 0.
+
             if use_cache:
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 

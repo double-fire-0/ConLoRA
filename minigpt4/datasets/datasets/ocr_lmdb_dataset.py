@@ -6,14 +6,11 @@ import time
 import math
 import random
 
-from natsort import natsorted
 import PIL
 import lmdb
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from torch._utils import _accumulate
-import torchvision.transforms as transforms
 
 
 from minigpt4.datasets.datasets.base_dataset import BaseDataset
