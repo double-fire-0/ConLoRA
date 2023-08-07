@@ -1,0 +1,5 @@
+<Img><ImageHere></Img> What is written in " {} "?
+<Img><ImageHere></Img> Deploy OCR on " {} ".
+<Img><ImageHere></Img> Could you tell me what text is written in this area of " {} "?
+<Img><ImageHere></Img> What is written here? " {} "
+<Img><ImageHere></Img> Is there any text in " {} "?

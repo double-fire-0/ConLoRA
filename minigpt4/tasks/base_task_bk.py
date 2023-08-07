@@ -23,9 +23,6 @@ from torchvision.utils import draw_bounding_boxes
 import re
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
-import io
-
 
 class BaseTask:
     def __init__(self, **kwargs):
@@ -270,24 +267,17 @@ class BaseTask:
                     vis_out = model.module.generate(samples)
                     output_text = vis_out['output_text']
                     # output_text = '<bin_74> <bin_23> <bin_34> <bin_58>###'
-
-                    bin_boxes = vis_out['input_item']
-                    description = vis_out['label']
-
-                    # description = vis_out['input_item']
-                    # bin_boxes = vis_out['output_item']
+                    description = vis_out['description']
+                    bin_boxes = vis_out['bin_boxes']
                     image = vis_out['image_tensor']
                     
                     self.tensorboard_writer.add_text(f'text result train in rank {get_rank()}', output_text, total_iter)
                     self.tensorboard_writer.flush()
 
                     image = self.unnorm_image(image)
-                    # image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), output_text, bin_boxes)
-                    image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), None, bin_boxes)
-
-                    image_bbox_des = self.put_text(image_bbox, f'pred: {output_text} label: {description}')
-                    self.tensorboard_writer.add_figure(f'image result train in rank {get_rank()}', image_bbox_des, total_iter)
-                    # self.tensorboard_writer.add_image(f'image result train in rank {get_rank()}', image_bbox_des, total_iter, dataformats='HWC')
+                    image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), output_text, bin_boxes)
+                    image_bbox_des = self.put_text(image_bbox, description)
+                    self.tensorboard_writer.add_image(f'image result train in rank {get_rank()}', image_bbox_des, total_iter, dataformats='HWC')
                     
                     samples = next(data_loader)
                     samples = prepare_sample(samples, cuda_enabled=cuda_enabled)
@@ -295,19 +285,15 @@ class BaseTask:
                     vis_out = model.module.generate(samples)
                     output_text = vis_out['output_text']
                     # output_text = '<bin_74> <bin_23> <bin_34> <bin_58>###'
-                    description = vis_out['label']
-                    bin_boxes = vis_out['input_item']
+                    description = vis_out['description']
+                    bin_boxes = vis_out['bin_boxes']
                     image = vis_out['image_tensor']
                     
                     self.tensorboard_writer.add_text(f'text result eval in rank {get_rank()}', output_text, total_iter)
                     image = self.unnorm_image(image)
-
-                    # image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), output_text, bin_boxes)
-                    image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), None, bin_boxes)
-                    
-                    image_bbox_des = self.put_text(image_bbox, f'pred: {output_text} label: {description}')
-                    self.tensorboard_writer.add_figure(f'image result eval in rank {get_rank()}', image_bbox_des, total_iter)
-                    # self.tensorboard_writer.add_image(f'image result eval in rank {get_rank()}', image_bbox_des, total_iter, dataformats='HWC')
+                    image_bbox = self.get_image_with_bbox((image * 255).to(torch.uint8), output_text, bin_boxes)
+                    image_bbox_des = self.put_text(image_bbox, description)
+                    self.tensorboard_writer.add_image(f'image result eval in rank {get_rank()}', image_bbox_des, total_iter, dataformats='HWC')
                     
                     # self.tmp_save_result_wy(vis_out, os.path.join(self.tmp_res_path, 'eval.tsv'))
                 except Exception as error:
@@ -323,14 +309,13 @@ class BaseTask:
             for k, meter in metric_logger.meters.items()
         }
 
-    def get_image_with_bbox(self, image, output_text=None, bin_boxes=None):
+    def get_image_with_bbox(self, image, output_text, bin_boxes):
         try:
-            if output_text is not None:
-                output_box = re.findall(r"<bin_(.+?)>", output_text)
-                output_box = [int(out) for out in output_box]
+            output_box = re.findall(r"<bin_(.+?)>", output_text)
+            output_box = [int(out) for out in output_box]
             bin_boxes = re.findall(r"<bin_(.+?)>", bin_boxes)
             bin_boxes = [int(out) for out in bin_boxes]
-            box = [bin_boxes, output_box] if output_text else [bin_boxes]
+            box = [bin_boxes, output_box]
             box = torch.tensor(box, dtype=torch.int)
             image = draw_bounding_boxes(image, box, width=5, colors=["blue", "orange"], fill=False)
             return image  # [Tensor(C,H,W)] uint8 
@@ -342,23 +327,11 @@ class BaseTask:
     def put_text(self, img, texts):
         try:
             arrimage = img.numpy().transpose(1, 2, 0)
-            plt.rcParams['font.sans-serif']=['SimHei']  # Show Chinese label
-            plt.rcParams['axes.unicode_minus']=False    # These two lines need to be set manually
-            fig = plt.figure()
-            plt.imshow(arrimage)
-            plt.title(texts)
-            plt.axis('off')
-            return fig
+            result = cv2.putText(arrimage, str(texts), (0, 30), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 2)
+            return result
         except Exception as error:
             logging.exception("put_text")
             raise error
-        # try:
-        #     arrimage = img.numpy().transpose(1, 2, 0)
-        #     result = cv2.putText(arrimage, str(texts), (0, 30), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255, 255, 255), 2)
-        #     return result
-        # except Exception as error:
-        #     logging.exception("put_text")
-        #     raise error
     
     # TODO a better style
     def unnorm_image(self, image_norm):

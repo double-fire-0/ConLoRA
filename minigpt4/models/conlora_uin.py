@@ -1,3 +1,5 @@
+# TODO: Make it work with all kind of data
+
 import logging
 import random
 import copy
@@ -17,8 +19,8 @@ from minigpt4.conversation.conversation import StoppingCriteriaSub
 from minigpt4.models.utils.lora_util import default_lora_config_map, get_lora_model, print_trainable_parameters
 
 
-@registry.register_model("conlora_det")
-class ConLora_Det(Blip2Base):
+@registry.register_model("conlora_uin")
+class ConLora_UIN(Blip2Base):
     """
     BLIP2 GPT-LLAMA model.
     """
@@ -226,14 +228,14 @@ class ConLora_Det(Blip2Base):
                 inputs_llama.size()[:-1], dtype=torch.long).to(image.device)
         return inputs_llama, atts_llama
 
-    def prompt_wrap(self, img_embeds, atts_img, description, bin_boxes, prompt):
+    def prompt_wrap(self, img_embeds, atts_img, input_item, output_item, prompt):
         if prompt:
             # from ipdb import set_trace
             # set_trace()
 
             batch_size = img_embeds.shape[0]
-            prompts = [prompt.format(d) for d in description]
-            examples = [prompts[i] + bin_boxes[i] + self.end_sym for i in range(len(prompts))]
+            prompts = [prompt.format(d) for d in input_item]
+            examples = [prompts[i] + output_item[i] + self.end_sym for i in range(len(prompts))]
 
             p_before, p_after = [p.split('ImageHere')[0] for p in prompts], [p.split('ImageHere')[-1] for p in prompts]
             e_before, e_after = [e.split('ImageHere')[0] for e in examples], [e.split('ImageHere')[-1] for e in examples]
@@ -270,13 +272,13 @@ class ConLora_Det(Blip2Base):
         else:
             assert NotImplementedError
     
-    def prompt_wrap_generate(self, img_embeds, atts_img, description, prompt):
+    def prompt_wrap_generate(self, img_embeds, atts_img, input_item, prompt):
         if prompt:
             # from ipdb import set_trace
             # set_trace()
 
             one_image_embed = img_embeds[0].unsqueeze(0)
-            prompts = [prompt.format(d) for d in description]
+            prompts = [prompt.format(d) for d in input_item]
 
             p_before, p_after = [p.split('ImageHere')[0] for p in prompts], [p.split('ImageHere')[-1] for p in prompts]
             p_before, p_after = p_before[0], p_after[0]
@@ -298,17 +300,18 @@ class ConLora_Det(Blip2Base):
         image = samples["image"]
         img_embeds, atts_img = self.encode_img(image)
 
-        description = samples["description"]
-        bin_boxes = samples["bin_boxes"]
+        input_item = samples["input_item"]
+        output_item = samples["output_item"]
+
         self.llama_tokenizer.padding_side = "right"
 
         if hasattr(samples, 'question_split'):  # VQA dataset
             print('VQA Batch')
             vqa_prompt = '###Human: <Img><ImageHere></Img> '
-            wrapped_embeds_all, wrapped_atts_all, labels = self.prompt_wrap(img_embeds, atts_img, description, bin_boxes, vqa_prompt)
+            wrapped_embeds_all, wrapped_atts_all, labels = self.prompt_wrap(img_embeds, atts_img, input_item, output_item, vqa_prompt)
         elif self.prompt_list:
             prompt = random.choice(self.prompt_list)
-            wrapped_embeds_all, wrapped_atts_all, labels = self.prompt_wrap(img_embeds, atts_img, description, bin_boxes, prompt)
+            wrapped_embeds_all, wrapped_atts_all, labels = self.prompt_wrap(img_embeds, atts_img, input_item, output_item, prompt)
 
         batch_size = img_embeds.shape[0]
 
@@ -335,17 +338,17 @@ class ConLora_Det(Blip2Base):
         image = samples["image"]
         img_embeds, atts_img = self.encode_img(image)
 
-        description = samples["description"]
-        bin_boxes = samples["bin_boxes"]
+        input_item = samples["input_item"]
+        output_item = samples["output_item"]
         self.llama_tokenizer.padding_side = "right"
 
         if hasattr(samples, 'question_split'):  # VQA dataset
             print('VQA Batch')
             vqa_prompt = '###Human: <Img><ImageHere></Img> '
-            inputs_embeds = self.prompt_wrap_generate(img_embeds, atts_img, description, vqa_prompt)
+            inputs_embeds = self.prompt_wrap_generate(img_embeds, atts_img, input_item, vqa_prompt)
         elif self.prompt_list:
             prompt = random.choice(self.prompt_list)
-            inputs_embeds = self.prompt_wrap_generate(img_embeds, atts_img, description, prompt)
+            inputs_embeds = self.prompt_wrap_generate(img_embeds, atts_img, input_item, prompt)
 
         batch_size = img_embeds.shape[0]
 
@@ -377,7 +380,7 @@ class ConLora_Det(Blip2Base):
             output_token = output_token[1:]
         output_text = self.llama_tokenizer.decode(output_token, add_special_tokens=False)
         
-        return {'description': description[0], "output_text": output_text, 'bin_boxes': bin_boxes[0], 'image_tensor': image[0]}
+        return {'input_item': input_item[0], "output_text": output_text, 'label': output_item[0], 'image_tensor': image[0]}
     
     def get_embed_tokens(self, samples):
         if isinstance(self.llama_model, PeftModel):

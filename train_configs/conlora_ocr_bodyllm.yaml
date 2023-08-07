@@ -1,0 +1,63 @@
+model:
+  arch: conlora_uin
+  model_type: pretrain_vicuna
+  content_use_lora: ['ve', 'qformer','llm']
+  llm_lora_cfg:
+    target_modules: .*model\.layers\.\b([0-9]|1[0-9]|2[0-1])\b.*\.(q_proj|v_proj)
+  vit_model: eva_clip_g_sparse_qkv
+  vit_precision: fp32 # TODO: check wehter use fp16 or not
+  freeze_vit: True
+  freeze_qformer: True
+  freeze_fc: True
+  max_txt_len: 160
+  end_sym: "###"
+  prompt_path: "prompts/ocr_box.txt"
+  prompt_template: '###Human: {} ###Assistant: '
+  ckpt: '/hetu_group/wangyan/Wy_MiniGPT4/ckpt_pretrain/prerained_minigpt4_7b.pth'
+
+
+datasets:
+  ocr_art:
+    vis_processor:
+      train:
+        name: "coco_image_train"
+        patch_image_size: 224
+        max_image_size: 224
+        num_bin: 224 # bin for x and y
+        use_oject_random_crop: True
+    text_processor:
+      train:
+        name: "blip_caption"
+
+run:
+  runner: runner_lora
+  task: image_text_pretrain
+  # optimizer
+  lr_sched: "linear_warmup_cosine_lr"
+  init_lr: 5e-4
+  min_lr: 0.0
+  warmup_lr: 1e-6
+
+  weight_decay: 0.05
+  max_epoch: 20
+  # iters_per_epoch: 100 # use auto set iter
+  # batch_size_train: 12
+  # batch_size_eval: 12
+  batch_size_train: 6 # can run on 32g v100
+  batch_size_eval: 6
+  num_workers:  2 # for debug set 0 #4
+  warmup_steps: 2000 # smaller for lora
+
+  seed: 42
+  output_dir: "output/conlora_ocr_bodyllm"
+
+  amp: True
+  resume_ckpt_path: null
+
+  evaluate: False 
+  train_splits: ["train"]
+
+  device: "cuda"
+  world_size: 1
+  dist_url: "env://"
+  distributed: True

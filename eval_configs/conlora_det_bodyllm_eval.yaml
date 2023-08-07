@@ -11,6 +11,7 @@ model:
   freeze_fc: True
   max_txt_len: 160
   end_sym: "###"
+  low_resource: True
   prompt_path: "prompts/refcoco.txt"
   prompt_template: '###Human: {} ###Assistant: '
   ckpt: '/hetu_group/wangyan/Wy_MiniGPT4/ckpt_pretrain/prerained_minigpt4_7b.pth'

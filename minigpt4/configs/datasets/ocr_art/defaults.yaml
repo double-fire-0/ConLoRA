@@ -1,0 +1,6 @@
+datasets:
+  ocr_art:
+    data_type: images
+    build_info:
+      json_path: /hetu_group/wangyan/datasets/ocr_art/train_images_after_process.json
+      vis_root: /hetu_group/wangyan/datasets/ocr_art/train_images

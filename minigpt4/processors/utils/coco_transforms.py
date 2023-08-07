@@ -218,6 +218,37 @@ class RandomResize(object):
         else:
             return resize(img, target, size, self.max_size)
 
+            
+class ObjectRandmoCrop(object):
+    def __init__(self, thres=0.3*0.3, factor_extend=1.0):
+        self.factor_extend = factor_extend  # random.uniform(0, 1.0) for 4 direction, 0.25 area average
+        self.thres = thres
+
+    def __call__(self, img, target):
+        image_width, image_height = img.size
+
+        x0 = float(target['boxes'][0][0])
+        y0 = float(target['boxes'][0][1])
+        x1 = float(target['boxes'][0][2])
+        y1 = float(target['boxes'][0][3])
+
+        # from ipdb import set_trace; set_trace()
+        if ((x1 - x0) * (y1 - y0)) / (image_width * image_height) > self.thres:
+            return img, target
+
+        box_width = x1 - x0
+        box_height = y1 - y0
+
+        crop_left = max(x0 - box_width * random.uniform(0.0, self.factor_extend), 0)
+        crop_right = min(x1 + box_width * random.uniform(0.0, self.factor_extend), image_width)
+        crop_top = max(y0 - box_height * random.uniform(0.0, self.factor_extend), 0)
+        crop_bottom = min(y1 + box_height * random.uniform(0.0, self.factor_extend), image_height)
+
+
+        return crop(img, target, (crop_top, crop_left, crop_bottom - crop_top, crop_right - crop_left), delete=False)
+
+        
+
 
 class ToTensor(object):
     def __call__(self, img, target):

@@ -20,9 +20,14 @@ class CoCoImageBaseProcessor(BaseProcessor):
 @registry.register_processor("coco_image_train")
 class CoCoImageTrainProcessor(CoCoImageBaseProcessor):
 
-    def __init__(self, mean=None, std=None, patch_image_size=512, max_image_size=512, num_bin=1000):
+    def __init__(self, mean=None, std=None, patch_image_size=512, max_image_size=512, num_bin=1000, use_oject_random_crop=False):
         super().__init__(mean=mean, std=std)
         self.num_bin = num_bin
+        self.use_oject_random_crop = use_oject_random_crop
+
+        if self.use_oject_random_crop:
+            self.oject_random_crop = T.ObjectRandmoCrop()
+        
 
         self.image_box_transform = T.Compose([
             T.RandomResize([patch_image_size], max_size=patch_image_size),
@@ -43,6 +48,9 @@ class CoCoImageTrainProcessor(CoCoImageBaseProcessor):
         boxes_target["labels"] = np.array([0])
         boxes_target["area"] = torch.tensor(
             [(float(x1) - float(x0)) * (float(y1) - float(y0))])
+
+        if self.use_oject_random_crop:
+            image, boxes_target = self.oject_random_crop(image, boxes_target)
 
         patch_image, patch_boxes = self.image_box_transform(
             image, boxes_target)
@@ -72,6 +80,7 @@ class CoCoImageTrainProcessor(CoCoImageBaseProcessor):
         patch_image_size = cfg.get("patch_image_size", 512)
         max_image_size = cfg.get("max_image_size", 512)
         num_bin = cfg.get('num_bin', 1000)
+        use_oject_random_crop = cfg.get('use_oject_random_crop', False)
 
         mean = cfg.get("mean", None)
         std = cfg.get("std", None)
@@ -81,5 +90,7 @@ class CoCoImageTrainProcessor(CoCoImageBaseProcessor):
             std=std,
             patch_image_size=patch_image_size,
             max_image_size=max_image_size,
-            num_bin=num_bin
+            num_bin=num_bin,
+            use_oject_random_crop=use_oject_random_crop,
         )
+

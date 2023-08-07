@@ -17,6 +17,7 @@ from minigpt4.models.degpt import DEGPT
 from minigpt4.processors.base_processor import BaseProcessor
 from minigpt4.models.mini_gpt4_lora import MiniGPT4LoRA
 from minigpt4.models.conlora_det import ConLora_Det
+from minigpt4.models.conlora_uin import ConLora_UIN
 
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     'DEGPT',
     'MiniGPT4LoRA',
     'ConLora_Det',
+    'ConLora_UIN',
 ]
 
 

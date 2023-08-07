@@ -18,6 +18,14 @@ from minigpt4.models import *
 from minigpt4.processors import *
 from minigpt4.runners import *
 from minigpt4.tasks import *
+from minigpt4.processors.utils.inference_util import get_image_with_bbox, unnorm_image
+
+import torchvision.transforms as T
+from PIL import Image
+import re
+
+global save_dic
+global_save_dic = {}
 
 
 def parse_args():
@@ -73,7 +81,7 @@ def gradio_reset(chat_state, img_list):
         chat_state.messages = []
     if img_list is not None:
         img_list = []
-    return None, gr.update(value=None, interactive=True), gr.update(placeholder='Please upload your image first', interactive=False),gr.update(value="Upload & Start Chat", interactive=True), chat_state, img_list
+    return None, gr.update(value=None, interactive=True), gr.update(placeholder='Please upload your image first', interactive=False), gr.update(value=None, interactive=False), gr.update(value="Upload & Start Chat", interactive=True), chat_state, img_list
 
 def upload_img(gr_img, text_input, chat_state, lora_choice):
     if gr_img is None:
@@ -85,7 +93,8 @@ def upload_img(gr_img, text_input, chat_state, lora_choice):
     chat_state = CONV_VISION.copy()
     img_list = []
     llm_message, image_after_process = chat.upload_img(gr_img, chat_state, img_list)
-    return gr.update(interactive=True), gr.update(interactive=True, placeholder='Type and press Enter'), gr.update(value="Insert image woth chosen mode", interactive=True), chat_state, img_list, image_after_process
+    global_save_dic['image_after_process'] = image_after_process
+    return gr.update(interactive=True), gr.update(interactive=True, placeholder='Type and press Enter'), gr.update(value="Insert image woth chosen mode", interactive=True), chat_state, img_list
 
 def gradio_ask(user_message, chatbot, chat_state):
     if len(user_message) == 0:
@@ -95,7 +104,7 @@ def gradio_ask(user_message, chatbot, chat_state):
     return '', chatbot, chat_state
 
 
-def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature, image_out, image_after_process):
+def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature, image_out):
     llm_message = chat.answer(conv=chat_state,
                               img_list=img_list,
                               num_beams=num_beams,
@@ -103,19 +112,28 @@ def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature, image_o
                               max_new_tokens=300,
                               max_length=2000)[0]
     chatbot[-1][1] = llm_message
-    return chatbot, chat_state, img_list
 
-title = """<h1 align="center">Demo of MiniGPT-4</h1>"""
-description = """<h3>This is the demo of MiniGPT-4. Upload your images and start chatting!</h3>"""
-article = """<p><a href='https://minigpt-4.github.io'><img src='https://img.shields.io/badge/Project-Page-Green'></a></p><p><a href='https://github.com/Vision-CAIR/MiniGPT-4'><img src='https://img.shields.io/badge/Github-Code-blue'></a></p><p><a href='https://raw.githubusercontent.com/Vision-CAIR/MiniGPT-4/main/MiniGPT_4.pdf'><img src='https://img.shields.io/badge/Paper-PDF-red'></a></p>
-"""
+    image_out_flag = False
+    image_after_process = global_save_dic['image_after_process']
+    if len(re.findall(r"<bin_(.+?)>", llm_message)) >= 2:
+        image_unnorm = unnorm_image(image_after_process)
+        image_box = get_image_with_bbox(image_unnorm, llm_message)
+        image_out = T.ToPILImage()(image_box)
+        image_out_flag = True
+
+    return chatbot, chat_state, img_list, image_out  #gr.update(interactive=False) if image_out_flag else image_out
+
+title = """<h1 align="center">Demo of Connect LoRA</h1>"""
+# description = """<h3>This is the demo of MiniGPT-4. Upload your images and start chatting!</h3>"""
+# article = """<p><a href='https://minigpt-4.github.io'><img src='https://img.shields.io/badge/Project-Page-Green'></a></p><p><a href='https://github.com/Vision-CAIR/MiniGPT-4'><img src='https://img.shields.io/badge/Github-Code-blue'></a></p><p><a href='https://raw.githubusercontent.com/Vision-CAIR/MiniGPT-4/main/MiniGPT_4.pdf'><img src='https://img.shields.io/badge/Paper-PDF-red'></a></p>
+# """
 
 #TODO show examples below
 
 with gr.Blocks() as demo:
     gr.Markdown(title)
-    gr.Markdown(description)
-    gr.Markdown(article)
+    # gr.Markdown(description)
+    # gr.Markdown(article)
 
     with gr.Row():
         with gr.Column(scale=0.5):
@@ -153,15 +171,15 @@ with gr.Blocks() as demo:
 
     image_after_process = None
 
-    upload_button.click(upload_img, [image, text_input, chat_state, lora_choice], [image, text_input, upload_button, chat_state, img_list, image_after_process])
+    upload_button.click(upload_img, [image, text_input, chat_state, lora_choice], [image, text_input, upload_button, chat_state, img_list])
     
     text_input.submit(gradio_ask, [text_input, chatbot, chat_state], [text_input, chatbot, chat_state]).then(
-        gradio_answer, [chatbot, chat_state, img_list, num_beams, temperature, image_out, image_after_process], [chatbot, chat_state, img_list, image_out]
+        gradio_answer, [chatbot, chat_state, img_list, num_beams, temperature, image_out], [chatbot, chat_state, img_list, image_out]
     )
 
 
     
-    clear.click(gradio_reset, [chat_state, img_list], [chatbot, image, text_input, upload_button, chat_state, img_list], queue=False)
+    clear.click(gradio_reset, [chat_state, img_list], [chatbot, image, image_out, text_input, upload_button, chat_state, img_list], queue=False)
 
 demo.launch(share=True, enable_queue=True)
 
