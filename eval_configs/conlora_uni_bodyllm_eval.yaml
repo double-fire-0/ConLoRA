@@ -1,5 +1,5 @@
 model:
-  arch: conlora_det
+  arch: conlora_uin
   model_type: pretrain_vicuna
   content_use_lora: ['ve', 'qformer','llm']
   llm_lora_cfg:
@@ -17,7 +17,7 @@ model:
   ckpt: '/hetu_group/wangyan/Wy_MiniGPT4/ckpt_pretrain/prerained_minigpt4_7b.pth'
   lora_path:
     detection_lora: /hetu_group/wangyan/Wy_MiniGPT4/minigpt4/output/conlora_det_bodyllm/final_bodyllm/lora_9
-    ocr_lora: /hetu_group/wangyan/Wy_MiniGPT4/minigpt4/output/conlora_ocr_bodyllm/20230803202/lora_19
+    # ocr_lora: /hetu_group/wangyan/Wy_MiniGPT4/minigpt4/output/conlora_ocr_bodyllm/20230803202/lora_19
 
 
 datasets:

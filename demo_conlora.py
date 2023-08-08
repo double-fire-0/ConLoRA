@@ -63,6 +63,7 @@ args = parse_args()
 cfg = Config(args)
 
 model_config = cfg.model_cfg
+lora_name_list = list(model_config.lora_path.keys())
 model_config.device_8bit = args.gpu_id
 model_cls = registry.get_model_class(model_config.arch)
 model = model_cls.from_config(model_config).to('cuda:{}'.format(args.gpu_id))
@@ -140,7 +141,7 @@ with gr.Blocks() as demo:
             image = gr.Image(type="pil")
             
             image_out = gr.Image(type="pil", interactive=False)
-            lora_choice = gr.Radio(['original', 'detection_lora'], value='original', label="Choose a mode")
+            lora_choice = gr.Radio(['original'] + lora_name_list, value='original', label="Choose a mode")
 
             upload_button = gr.Button(value="Upload & Start Chat", interactive=True, variant="primary")
             clear = gr.Button("Restart")

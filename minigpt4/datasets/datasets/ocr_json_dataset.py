@@ -20,7 +20,7 @@ class OCRJsonDataset(BaseDataset):
         self.metas = []
         for line in lines:
             data = json.loads(line)
-            data['image_path'] = os.path.join(self.vis_root, data['image_name']+ '.jpg')
+            data['image_path'] = os.path.join(self.vis_root, data['image_name'])
             self.metas.append(data)
 
     def __getitem__(self, index):

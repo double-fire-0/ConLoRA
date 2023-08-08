@@ -260,6 +260,7 @@ class BaseTask:
                 self.tensorboard_writer.add_scalar('train lr', optimizer.param_groups[0]["lr"], total_iter)
 
         # TODO fix style
+        # TODO fit different input and output
             if (i + 1) % tb_freq == 0 and self.tensorboard_writer is not None:
                 # TODO a better style
                 # write train images to tensorboard

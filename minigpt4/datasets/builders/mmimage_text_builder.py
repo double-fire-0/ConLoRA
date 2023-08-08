@@ -146,3 +146,39 @@ class OcrARTBuilder(BaseDatasetBuilder):
         )
 
         return datasets
+
+
+@registry.register_builder("ocr_coco")
+class OcrARTBuilder(BaseDatasetBuilder):
+    train_dataset_cls = OCRJsonDataset
+
+    DATASET_CONFIG_DICT = {
+        "default": "configs/datasets/ocr_coco/defaults.yaml",
+    }
+
+    def build_datasets(self):
+        # at this point, all the annotations and image/videos should be all downloaded to the specified locations.
+        logging.info("Building datasets...")
+        self.build_processors()
+
+        build_info = self.config.build_info
+        json_path = build_info.json_path
+        vis_root = build_info.vis_root
+
+        datasets = dict()
+
+        if not os.path.exists(json_path):
+            warnings.warn("json path {} does not exist.".format(json_path))
+
+        # create datasets
+        dataset_cls = self.train_dataset_cls
+        datasets['train'] = dataset_cls(
+            vis_processor=self.vis_processors["train"],
+            text_processor=self.text_processors["train"],
+            json_path=json_path,
+            vis_root=vis_root
+        )
+
+        return datasets
+        
+

@@ -26,7 +26,7 @@ class CoCoImageTrainProcessor(CoCoImageBaseProcessor):
         self.use_oject_random_crop = use_oject_random_crop
 
         if self.use_oject_random_crop:
-            self.oject_random_crop = T.ObjectRandmoCrop()
+            self.oject_random_crop = T.ObjectRandmoCrop(thres=0.25*0.25)
         
 
         self.image_box_transform = T.Compose([
