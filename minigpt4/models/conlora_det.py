@@ -418,7 +418,7 @@ class ConLora_Det(Blip2Base):
 
     def check_set_lora(self, lora_name):
         if lora_name == self.current_lora:
-            print('Keep the same with {lora_name}')
+            print(f'Keep the same with {lora_name}')
             pass
         elif lora_name == 'original':
             for content in self.content_use_lora:

@@ -10,7 +10,7 @@ import gradio as gr
 from minigpt4.common.config import Config
 from minigpt4.common.dist_utils import get_rank
 from minigpt4.common.registry import registry
-from minigpt4.conversation.conversation_conlora import Chat, CONV_VISION
+from minigpt4.conversation.conversation_conlora import Chat, CONV_VISION, Conversation
 
 # imports modules for registration
 from minigpt4.datasets.builders import *
@@ -23,8 +23,8 @@ from minigpt4.processors.utils.inference_util import get_image_with_bbox, unnorm
 import torchvision.transforms as T
 from PIL import Image
 import re
+import uuid
 
-global save_dic
 global_save_dic = {}
 
 
@@ -32,6 +32,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Demo")
     parser.add_argument("--cfg-path", required=True, help="path to configuration file.")
     parser.add_argument("--gpu-id", type=int, default=0, help="specify the gpu to load the model.")
+    parser.add_argument("--continue-chat", type=bool, default=False, help="Where to continue chat when upload new image feature.")
     parser.add_argument(
         "--options",
         nargs="+",
@@ -84,18 +85,22 @@ def gradio_reset(chat_state, img_list):
         img_list = []
     return None, gr.update(value=None, interactive=True), gr.update(placeholder='Please upload your image first', interactive=False), gr.update(value=None, interactive=False), gr.update(value="Upload & Start Chat", interactive=True), chat_state, img_list
 
-def upload_img(gr_img, text_input, chat_state, lora_choice):
+def upload_img(gr_img, text_input, chat_state, lora_choice, chatbot, img_list):
     if gr_img is None:
         return None, None, gr.update(interactive=True), chat_state, None
     
     # set lora before upload image
     chat.model.check_set_lora(lora_choice)
+
+    model_state = getattr(chat.model, 'current_lora', 'default')
+    chatbot.append([None, f'<mark>[***Add image feature with {model_state} state***]</mark>'])
     
-    chat_state = CONV_VISION.copy()
-    img_list = []
+    if not args.continue_chat or not isinstance(chat_state, Conversation):
+        chat_state = CONV_VISION.copy()
+        img_list = []
     llm_message, image_after_process = chat.upload_img(gr_img, chat_state, img_list)
     global_save_dic['image_after_process'] = image_after_process
-    return gr.update(interactive=True), gr.update(interactive=True, placeholder='Type and press Enter'), gr.update(value="Insert image woth chosen mode", interactive=True), chat_state, img_list
+    return gr.update(interactive=True), gr.update(interactive=True, placeholder='Type and press Enter'), gr.update(value="Insert image woth chosen mode", interactive=True), chat_state, img_list, chatbot
 
 def gradio_ask(user_message, chatbot, chat_state):
     if len(user_message) == 0:
@@ -105,14 +110,17 @@ def gradio_ask(user_message, chatbot, chat_state):
     return '', chatbot, chat_state
 
 
-def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature, image_out):
+def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature):
     llm_message = chat.answer(conv=chat_state,
                               img_list=img_list,
                               num_beams=num_beams,
                               temperature=temperature,
                               max_new_tokens=300,
                               max_length=2000)[0]
-    chatbot[-1][1] = llm_message
+    model_state = getattr(chat.model, 'current_lora', 'default')
+
+    chatbot[-1][1] = f'<mark>[***{model_state}***]</mark> <br />' + llm_message
+
 
     image_out_flag = False
     image_after_process = global_save_dic['image_after_process']
@@ -122,7 +130,15 @@ def gradio_answer(chatbot, chat_state, img_list, num_beams, temperature, image_o
         image_out = T.ToPILImage()(image_box)
         image_out_flag = True
 
-    return chatbot, chat_state, img_list, image_out  #gr.update(interactive=False) if image_out_flag else image_out
+    if image_out_flag:
+        image_filename = uuid.uuid4().hex + '.jpg'    
+        image_save_path = os.path.join('./demo_tmp', image_filename)
+        image_out.save(image_save_path)
+        chatbot.append([None,(f'{image_save_path}', )])
+        #print([None,(f'{image_save_path}', )"])
+
+
+    return chatbot, chat_state, img_list  # gr.update(interactive=False) if image_out_flag else image_out
 
 title = """<h1 align="center">Demo of Connect LoRA</h1>"""
 # description = """<h3>This is the demo of MiniGPT-4. Upload your images and start chatting!</h3>"""
@@ -140,7 +156,7 @@ with gr.Blocks() as demo:
         with gr.Column(scale=0.5):
             image = gr.Image(type="pil")
             
-            image_out = gr.Image(type="pil", interactive=False)
+            # image_out = gr.Image(type="pil", interactive=False)
             lora_choice = gr.Radio(['original'] + lora_name_list, value='original', label="Choose a mode")
 
             upload_button = gr.Button(value="Upload & Start Chat", interactive=True, variant="primary")
@@ -167,20 +183,19 @@ with gr.Blocks() as demo:
         with gr.Column():
             chat_state = gr.State()
             img_list = gr.State()
-            chatbot = gr.Chatbot(label='MiniGPT-4')
+            chatbot = gr.Chatbot(label='ConLoRA')
             text_input = gr.Textbox(label='User', placeholder='Please upload your image first', interactive=False)
 
-    image_after_process = None
-
-    upload_button.click(upload_img, [image, text_input, chat_state, lora_choice], [image, text_input, upload_button, chat_state, img_list])
+    upload_button.click(upload_img, [image, text_input, chat_state, lora_choice, chatbot, img_list], 
+                                    [image, text_input, upload_button, chat_state, img_list, chatbot])
     
     text_input.submit(gradio_ask, [text_input, chatbot, chat_state], [text_input, chatbot, chat_state]).then(
-        gradio_answer, [chatbot, chat_state, img_list, num_beams, temperature, image_out], [chatbot, chat_state, img_list, image_out]
+        gradio_answer, [chatbot, chat_state, img_list, num_beams, temperature], [chatbot, chat_state, img_list]
     )
 
 
     
-    clear.click(gradio_reset, [chat_state, img_list], [chatbot, image, image_out, text_input, upload_button, chat_state, img_list], queue=False)
+    clear.click(gradio_reset, [chat_state, img_list], [chatbot, image, text_input, upload_button, chat_state, img_list], queue=False)
 
 demo.launch(share=True, enable_queue=True)
 
