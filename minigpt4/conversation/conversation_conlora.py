@@ -137,7 +137,6 @@ class Chat:
     def answer(self, conv, img_list, max_new_tokens=300, num_beams=1, min_length=1, top_p=0.9,
                repetition_penalty=1.0, length_penalty=1, temperature=1.0, max_length=2000):
         conv.append_message(conv.roles[1], None)
-        from ipdb import set_trace; set_trace()
         embs = self.get_context_emb(conv, img_list)
 
         current_max_len = embs.shape[1] + max_new_tokens

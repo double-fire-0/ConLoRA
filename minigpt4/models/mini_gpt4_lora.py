@@ -363,9 +363,6 @@ class MiniGPT4LoRA(Blip2Base):
             'labels':targets,
         }
 
-        from ipdb import set_trace
-        set_trace()
-
         with self.maybe_autocast():
             outputs = self.llama_model(
                 inputs_embeds=inputs_embeds,

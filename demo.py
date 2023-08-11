@@ -109,9 +109,9 @@ article = """<p><a href='https://minigpt-4.github.io'><img src='https://img.shie
 #TODO show examples below
 
 with gr.Blocks() as demo:
-    gr.Markdown(title)
-    gr.Markdown(description)
-    gr.Markdown(article)
+    # gr.Markdown(title)
+    # gr.Markdown(description)
+    # gr.Markdown(article)
 
     with gr.Row():
         with gr.Column(scale=0.5):
@@ -140,7 +140,7 @@ with gr.Blocks() as demo:
         with gr.Column():
             chat_state = gr.State()
             img_list = gr.State()
-            chatbot = gr.Chatbot(label='MiniGPT-4')
+            chatbot = gr.Chatbot(label='chatbot')
             text_input = gr.Textbox(label='User', placeholder='Please upload your image first', interactive=False)
     
     upload_button.click(upload_img, [image, text_input, chat_state], [image, text_input, upload_button, chat_state, img_list])

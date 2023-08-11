@@ -95,7 +95,7 @@ def upload_img(gr_img, text_input, chat_state, lora_choice, chatbot, img_list):
     model_state = getattr(chat.model, 'current_lora', 'default')
     chatbot.append([None, f'<mark>[***Add image feature with {model_state} state***]</mark>'])
     
-    if not args.continue_chat or not isinstance(chat_state, Conversation):
+    if not args.continue_chat or not isinstance(chat_state, Conversation):  # if not continue chat or chat_state is not initialized
         chat_state = CONV_VISION.copy()
         img_list = []
     llm_message, image_after_process = chat.upload_img(gr_img, chat_state, img_list)
@@ -183,7 +183,7 @@ with gr.Blocks() as demo:
         with gr.Column():
             chat_state = gr.State()
             img_list = gr.State()
-            chatbot = gr.Chatbot(label='ConLoRA')
+            chatbot = gr.Chatbot(label='ConLoRA', height=5000)
             text_input = gr.Textbox(label='User', placeholder='Please upload your image first', interactive=False)
 
     upload_button.click(upload_img, [image, text_input, chat_state, lora_choice, chatbot, img_list], 
