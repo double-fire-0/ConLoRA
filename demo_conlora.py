@@ -28,6 +28,8 @@ import uuid
 global_save_dic = {}
 
 
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Demo")
     parser.add_argument("--cfg-path", required=True, help="path to configuration file.")
